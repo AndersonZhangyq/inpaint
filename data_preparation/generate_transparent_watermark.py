@@ -35,7 +35,7 @@ def addTextWatermark(image_path, font_path, output_path, text, show=False):
     font = ImageFont.truetype(font_path, 12)
     text_w, text_h = font.getsize(text)
 
-    text_mask = Image.new("RGBA", image.size, (255, 255, 255))
+    text_mask = Image.new("RGB", image.size, (255, 255, 255))
     draw_text_mask = ImageDraw.Draw(text_mask)
     draw_text_mask.text((image_w - margin_left - text_w, image_h - margin_bottom - text_h),
                         text, fill=(0, 0, 0), font=font)
@@ -44,7 +44,7 @@ def addTextWatermark(image_path, font_path, output_path, text, show=False):
     if show:
         text_mask.show()
 
-    text_rect_mask = Image.new("RGBA", image.size, (255, 255, 255))
+    text_rect_mask = Image.new("RGB", image.size, (255, 255, 255))
     draw_text_rect_mask = ImageDraw.Draw(text_rect_mask)
     draw_text_rect_mask.rectangle([(image_w - margin_left - text_w, image_h - margin_bottom - text_h),
                                    (image_w - margin_left, image_h - margin_bottom)],
@@ -55,11 +55,14 @@ def addTextWatermark(image_path, font_path, output_path, text, show=False):
     text_watermark = Image.new("RGBA", image.size, (255, 255, 255, 0))
     draw_text_watermark = ImageDraw.Draw(text_watermark)
     draw_text_watermark.text((image_w - margin_left - text_w, image_h - margin_bottom - text_h),
-                   text, fill=(255, 255, 255, 192), font=font)
+                             text, fill=(255, 255, 255, 192), font=font)
     out = Image.alpha_composite(image, text_watermark)
     if show:
         out.show()
-    out.save(osp.join(masked_output, "{}_masked.png".format(image_file_name_without_ext)))
+    out.save(
+        osp.join(masked_output, "{}_transparent_masked.png".format(image_file_name_without_ext)))
+    out.convert("RGB").save(
+        osp.join(masked_output, "{}_masked.png".format(image_file_name_without_ext)))
 
 
 if __name__ == "__main__":
@@ -67,5 +70,5 @@ if __name__ == "__main__":
     font_path = r"data_preparation\msyh.ttc"
     output_path = r"data_preparation\result"
     text = r"知乎 @张宇星"
-    show = True
+    show = False
     addTextWatermark(image_path, font_path, output_path, text, show)
