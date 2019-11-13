@@ -39,7 +39,7 @@ class DeepImagePriorDataset(Dataset):
     def __getitem__(self, index):
         img_path, mask_path = self.images_path[index]
         if self.img is None:
-            self.img = Image.open(img_path)
+            self.img = Image.open(img_path).convert('RGB')
         if self.mask is None:
             self.mask = Image.open(mask_path).convert('1')
         if self.noise is None:
