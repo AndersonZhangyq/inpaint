@@ -121,3 +121,6 @@ venv.bak/
 # IDEs
 .idea
 .vscode/
+runs/
+lightning_logs/
+*.pth
