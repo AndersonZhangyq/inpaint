@@ -22,6 +22,7 @@ class DeepImagePrior(pl.LightningModule):
         self.hparams = hparams
         self.l1 = torch.nn.Linear(28 * 28, 10)
         self.data_root = "data"
+        self.saved_output = None
         num_input_channels = 2
         num_output_channels = 3
         num_channels_down = [16, 32, 64, 128, 128]
@@ -127,7 +128,13 @@ class DeepImagePrior(pl.LightningModule):
         # REQUIRED
         noise, origin, mask = batch
         predicted = self.forward(noise)
+        self.saved_output = predicted.detach().cpu().numpy().squeeze()
         return {'loss': F.mse_loss(predicted * mask, origin * mask)}
+    
+    def on_epoch_end(self):
+        if (self.current_epoch % 20 == 0):
+            self.logger.experiment.add_image(f'generated_images', self.saved_output, self.current_epoch)
+            self.trainer.save_checkpoint("epoch_{}".format(self.current_epoch))
 
     # def validation_step(self, batch, batch_idx):
     #     # OPTIONAL
