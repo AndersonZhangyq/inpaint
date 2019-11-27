@@ -41,7 +41,7 @@ class DeepImagePriorDataset(Dataset):
         if self.img is None:
             self.img = Image.open(img_path).convert('RGB')
         if self.mask is None:
-            self.mask = Image.open(mask_path).convert('1')
+            self.mask = Image.open(mask_path).resize(self.img.size).convert('1')
         if self.noise is None:
             self.noise = get_noise(2, "noise", self.img.size)
         return self.noise, ToTensor()(self.img), ToTensor()(self.mask)

@@ -5,8 +5,6 @@ import os
 import torch
 from torch.nn import functional as F
 from torch.utils.data import DataLoader
-from torchvision.datasets import MNIST
-import torchvision.transforms as transforms
 from argparse import ArgumentParser
 import torch.nn as nn
 
@@ -21,8 +19,9 @@ class DeepImagePrior(pl.LightningModule):
         # not the best model...
         self.hparams = hparams
         self.l1 = torch.nn.Linear(28 * 28, 10)
-        self.data_root = "data"
+        self.data_root = "data/sub_data"
         self.saved_output = None
+        self.show_masked_once = False
         num_input_channels = 2
         num_output_channels = 3
         num_channels_down = [16, 32, 64, 128, 128]
@@ -129,6 +128,9 @@ class DeepImagePrior(pl.LightningModule):
         noise, origin, mask = batch
         predicted = self.forward(noise)
         self.saved_output = predicted.detach().cpu().numpy().squeeze()
+        if not self.show_masked_once:
+            self.logger.experiment.add_image(f'masked_images', origin.detach().cpu().numpy().squeeze() * mask.detach().cpu().numpy().squeeze(), self.current_epoch)
+            self.show_masked_once = True
         return {'loss': F.mse_loss(predicted * mask, origin * mask)}
     
     def on_epoch_end(self):
@@ -178,7 +180,7 @@ class DeepImagePrior(pl.LightningModule):
         parser = ArgumentParser(parents=[parent_parser])
         parser.add_argument('--learning_rate', default=0.01, type=float)
         parser.add_argument('--batch_size', default=1, type=int)
-        parser.add_argument('--ckpt_path', default=".", type=str)
+        parser.add_argument('--ckpt_path', default="dip_model", type=str)
 
         # training specific (for this model)
         parser.add_argument('--max_nb_epochs', default=5000, type=int)
