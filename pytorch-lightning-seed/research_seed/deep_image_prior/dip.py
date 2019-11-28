@@ -6,21 +6,33 @@ import torch
 from torch.nn import functional as F
 from torch.utils.data import DataLoader
 from argparse import ArgumentParser
-import torch.nn as nn
 
 import pytorch_lightning as pl
 from research_seed.common import *
 from research_seed.dataset import *
-import hiddenlayer as hl
+
+
+def add_module(self, module):
+    self.add_module(str(len(self) + 1), module)
+
+
+def psnr_loss(input, target):
+    mse = F.mse_loss(input, target)
+    psnr = -10 * torch.log10(mse)
+    return mse - psnr
+
+
+torch.nn.Module.add = add_module
 
 
 class DeepImagePrior(pl.LightningModule):
     def __init__(self, hparams):
         super(DeepImagePrior, self).__init__()
-        # not the best model...
         self.hparams = hparams
         self.l1 = torch.nn.Linear(28 * 28, 10)
-        self.data_root = "data/sub_data"
+        self.loss_type = hparams.loss_type
+        # self.data_root = "data/sub_data"
+        self.data_root = Path('C:\\Users\\zhang\\Desktop\\Code\\inpaint\\pytorch-lightning-seed\\data\\sub_data')
         self.saved_output = None
         self.show_masked_once = False
         num_input_channels = 2
@@ -32,95 +44,64 @@ class DeepImagePrior(pl.LightningModule):
         filter_size_up = 3
         filter_skip_size = 1
         need_sigmoid = True
-        need_bias = True
-        pad = 'zero'
         upsample_mode = 'nearest'
-        downsample_mode = 'stride'
         act_fun = 'LeakyReLU'
         need1x1_up = True
-        assert len(num_channels_down) == len(
-            num_channels_up) == len(num_channels_skip)
+        assert len(num_channels_down) == len(num_channels_up) == len(num_channels_skip)
 
         n_scales = len(num_channels_down)
 
-        if not (isinstance(upsample_mode, list) or isinstance(upsample_mode, tuple)):
-            upsample_mode = [upsample_mode]*n_scales
-
-        if not (isinstance(downsample_mode, list)or isinstance(downsample_mode, tuple)):
-            downsample_mode = [downsample_mode]*n_scales
-
-        if not (isinstance(filter_size_down, list) or isinstance(filter_size_down, tuple)):
-            filter_size_down = [filter_size_down]*n_scales
-
-        if not (isinstance(filter_size_up, list) or isinstance(filter_size_up, tuple)):
-            filter_size_up = [filter_size_up]*n_scales
-        
         last_scale = n_scales - 1
 
         input_depth = num_input_channels
-        
+
         model = nn.Sequential()
         model_tmp = model
 
         for i in range(len(num_channels_down)):
-
             deeper = nn.Sequential()
             skip = nn.Sequential()
 
             if num_channels_skip[i] != 0:
-                model_tmp.add(Concat(1, skip, deeper))
+                model_tmp.add_module(str(len(model_tmp)), Concat(1, skip, deeper))
             else:
-                model_tmp.add(deeper)
-            print(model_tmp)
-            model_tmp.add(bn(num_channels_skip[i] + (num_channels_up[i + 1] if i < last_scale else num_channels_down[i])))
-            print(model_tmp)
+                model_tmp.add_module(str(len(model_tmp)), deeper)
+            model_tmp.add_module(str(len(model_tmp)), nn.BatchNorm2d(
+                num_channels_skip[i] + (num_channels_up[i + 1] if i < last_scale else num_channels_down[i])))
             if num_channels_skip[i] != 0:
-                skip.add(conv(input_depth, num_channels_skip[i], filter_skip_size, bias=need_bias, pad=pad))
-                skip.add(bn(num_channels_skip[i]))
-                skip.add(act(act_fun))
-            print(model_tmp)
-            # skip.add(Concat(2, GenNoise(nums_noise[i]), skip_part))
+                skip.add_module(str(len(skip)),
+                                ConvBNAct(input_depth, num_channels_skip[i], filter_skip_size, act_fun=act_fun))
 
-            deeper.add(conv(input_depth, num_channels_down[i], filter_size_down[i], 2, bias=need_bias, pad=pad, downsample_mode=downsample_mode[i]))
-            deeper.add(bn(num_channels_down[i]))
-            deeper.add(act(act_fun))
+            deeper.add_module(str(len(deeper)),
+                              ConvBNAct(input_depth, num_channels_down[i], filter_size_down, stride=2, act_fun=act_fun))
 
-            deeper.add(conv(num_channels_down[i], num_channels_down[i], filter_size_down[i], bias=need_bias, pad=pad))
-            deeper.add(bn(num_channels_down[i]))
-            deeper.add(act(act_fun))
-            print(model_tmp)
+            deeper.add_module(str(len(deeper)),
+                              ConvBNAct(num_channels_down[i], num_channels_down[i], filter_size_down, act_fun=act_fun))
             deeper_main = nn.Sequential()
 
             if i == len(num_channels_down) - 1:
                 # The deepest
                 k = num_channels_down[i]
             else:
-                deeper.add(deeper_main)
+                deeper.add_module(str(len(deeper)), deeper_main)
                 k = num_channels_up[i + 1]
-            print(model_tmp)
-            deeper.add(nn.Upsample(scale_factor=2, mode=upsample_mode[i]))
-            print(model_tmp)
-            model_tmp.add(conv(num_channels_skip[i] + k, num_channels_up[i], filter_size_up[i], 1, bias=need_bias, pad=pad))
-            model_tmp.add(bn(num_channels_up[i]))
-            model_tmp.add(act(act_fun))
-            print(model_tmp)
+            deeper.add_module(str(len(deeper)), nn.Upsample(scale_factor=2, mode=upsample_mode))
+            model_tmp.add_module(str(len(model_tmp)),
+                                 ConvBNAct(num_channels_skip[i] + k, num_channels_up[i], filter_size_up,
+                                           act_fun=act_fun))
 
             if need1x1_up:
-                model_tmp.add(conv(num_channels_up[i], num_channels_up[i], 1, bias=need_bias, pad=pad))
-                model_tmp.add(bn(num_channels_up[i]))
-                model_tmp.add(act(act_fun))
-            print(model_tmp)
+                model_tmp.add_module(str(len(model_tmp)),
+                                     ConvBNAct(num_channels_up[i], num_channels_up[i], 1, act_fun=act_fun))
             input_depth = num_channels_down[i]
             model_tmp = deeper_main
 
-        model.add(conv(num_channels_up[0], num_output_channels, 1, bias=need_bias, pad=pad))
+        model.add_module(str(len(model)), nn.Conv2d(num_channels_up[0], num_output_channels, 1))
         if need_sigmoid:
-            model.add(nn.Sigmoid())
-        
+            model.add_module(str(len(model)), nn.Sigmoid())
+
         self.model = model
-        print(self.model)
-        exit()
-        # hl.build_graph(model, torch.zeros([1, 2, 183, 276])).save("./modelFile.pdf")
+        # print(self.model)
         # exit()
 
     def forward(self, x):
@@ -132,12 +113,20 @@ class DeepImagePrior(pl.LightningModule):
         predicted = self.forward(noise)
         self.saved_output = predicted.detach().cpu().numpy().squeeze()
         if not self.show_masked_once:
-            self.logger.experiment.add_image(f'masked_images', origin.detach().cpu().numpy().squeeze() * mask.detach().cpu().numpy().squeeze(), self.current_epoch)
+            self.logger.experiment.add_image(f'masked_images',
+                                             origin.detach().cpu().numpy().squeeze() * mask.detach().cpu().numpy().squeeze(),
+                                             self.current_epoch)
             self.show_masked_once = True
-        return {'loss': F.mse_loss(predicted * mask, origin * mask)}
-    
+        if self.loss_type == "mse":
+            loss_func = F.mse_loss
+        elif self.loss_type == "psnr":
+            loss_func = psnr_loss
+        else:
+            raise RuntimeError("Unknown loss type : {}".format(self.loss_type))
+        return {'loss': loss_func(predicted * mask, origin * mask)}
+
     def on_epoch_end(self):
-        if (self.current_epoch % 5 == 0):
+        if self.current_epoch % 5 == 0:
             self.logger.experiment.add_image(f'generated_images', self.saved_output, self.current_epoch)
             if not os.path.exists(self.hparams.ckpt_path):
                 os.makedirs(self.hparams.ckpt_path)
@@ -184,9 +173,19 @@ class DeepImagePrior(pl.LightningModule):
         parser.add_argument('--learning_rate', default=0.01, type=float)
         parser.add_argument('--batch_size', default=1, type=int)
         parser.add_argument('--depth', default=6, type=int)
+        parser.add_argument('--loss_type', default="psnr", type=str)
         parser.add_argument('--ckpt_path', default="dip_model", type=str)
 
         # training specific (for this model)
         parser.add_argument('--max_nb_epochs', default=5000, type=int)
 
         return parser
+
+
+if __name__ == "__main__":
+    parser = ArgumentParser(add_help=False)
+    parser = DeepImagePrior.add_model_specific_args(parser)
+
+    hparams = parser.parse_args()
+
+    DeepImagePrior(hparams)

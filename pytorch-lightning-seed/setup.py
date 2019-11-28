@@ -9,7 +9,8 @@ setup(name='research_seed',
       author_email='',
       url='https://github.com/williamFalcon/pytorch-lightning-conference-seed',  # REPLACE WITH YOUR OWN GITHUB PROJECT LINK
       install_requires=[
-            'pytorch-lightning'
+            'pytorch-lightning',
+            'numpy'
       ],
       packages=find_packages()
       )
