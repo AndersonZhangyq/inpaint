@@ -11,6 +11,7 @@ import torch.nn as nn
 import pytorch_lightning as pl
 from research_seed.common import *
 from research_seed.dataset import *
+import hiddenlayer as hl
 
 
 class DeepImagePrior(pl.LightningModule):
@@ -24,9 +25,9 @@ class DeepImagePrior(pl.LightningModule):
         self.show_masked_once = False
         num_input_channels = 2
         num_output_channels = 3
-        num_channels_down = [16, 32, 64, 128, 128]
-        num_channels_up = [16, 32, 64, 128, 128]
-        num_channels_skip = [4, 4, 4, 4, 4]
+        num_channels_down = [16, 32, 64, 128, 128][:hparams.depth]
+        num_channels_up = [16, 32, 64, 128, 128][:hparams.depth]
+        num_channels_skip = [4, 4, 4, 4, 4][:hparams.depth]
         filter_size_down = 3
         filter_size_up = 3
         filter_skip_size = 1
@@ -56,8 +57,6 @@ class DeepImagePrior(pl.LightningModule):
         
         last_scale = n_scales - 1
 
-        cur_depth = None
-
         input_depth = num_input_channels
         
         model = nn.Sequential()
@@ -72,14 +71,14 @@ class DeepImagePrior(pl.LightningModule):
                 model_tmp.add(Concat(1, skip, deeper))
             else:
                 model_tmp.add(deeper)
-            
+            print(model_tmp)
             model_tmp.add(bn(num_channels_skip[i] + (num_channels_up[i + 1] if i < last_scale else num_channels_down[i])))
-
+            print(model_tmp)
             if num_channels_skip[i] != 0:
                 skip.add(conv(input_depth, num_channels_skip[i], filter_skip_size, bias=need_bias, pad=pad))
                 skip.add(bn(num_channels_skip[i]))
                 skip.add(act(act_fun))
-                
+            print(model_tmp)
             # skip.add(Concat(2, GenNoise(nums_noise[i]), skip_part))
 
             deeper.add(conv(input_depth, num_channels_down[i], filter_size_down[i], 2, bias=need_bias, pad=pad, downsample_mode=downsample_mode[i]))
@@ -89,7 +88,7 @@ class DeepImagePrior(pl.LightningModule):
             deeper.add(conv(num_channels_down[i], num_channels_down[i], filter_size_down[i], bias=need_bias, pad=pad))
             deeper.add(bn(num_channels_down[i]))
             deeper.add(act(act_fun))
-
+            print(model_tmp)
             deeper_main = nn.Sequential()
 
             if i == len(num_channels_down) - 1:
@@ -98,19 +97,19 @@ class DeepImagePrior(pl.LightningModule):
             else:
                 deeper.add(deeper_main)
                 k = num_channels_up[i + 1]
-
+            print(model_tmp)
             deeper.add(nn.Upsample(scale_factor=2, mode=upsample_mode[i]))
-
+            print(model_tmp)
             model_tmp.add(conv(num_channels_skip[i] + k, num_channels_up[i], filter_size_up[i], 1, bias=need_bias, pad=pad))
             model_tmp.add(bn(num_channels_up[i]))
             model_tmp.add(act(act_fun))
-
+            print(model_tmp)
 
             if need1x1_up:
                 model_tmp.add(conv(num_channels_up[i], num_channels_up[i], 1, bias=need_bias, pad=pad))
                 model_tmp.add(bn(num_channels_up[i]))
                 model_tmp.add(act(act_fun))
-
+            print(model_tmp)
             input_depth = num_channels_down[i]
             model_tmp = deeper_main
 
@@ -119,6 +118,10 @@ class DeepImagePrior(pl.LightningModule):
             model.add(nn.Sigmoid())
         
         self.model = model
+        print(self.model)
+        exit()
+        # hl.build_graph(model, torch.zeros([1, 2, 183, 276])).save("./modelFile.pdf")
+        # exit()
 
     def forward(self, x):
         return self.model(x)
@@ -180,6 +183,7 @@ class DeepImagePrior(pl.LightningModule):
         parser = ArgumentParser(parents=[parent_parser])
         parser.add_argument('--learning_rate', default=0.01, type=float)
         parser.add_argument('--batch_size', default=1, type=int)
+        parser.add_argument('--depth', default=6, type=int)
         parser.add_argument('--ckpt_path', default="dip_model", type=str)
 
         # training specific (for this model)

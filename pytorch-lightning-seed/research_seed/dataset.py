@@ -26,9 +26,9 @@ class DeepImagePriorDataset(Dataset):
         image_path = self.data_path/"masked"
         mask_path = self.data_path/"mask"
         if not image_path.exists():
-            raise RuntimeError("Image path: {}/{} not found".format(image_path, image_path.resolve()))
+            raise RuntimeError("Image path: {} / {} not found".format(image_path, image_path.resolve()))
         if not mask_path.exists():
-            raise RuntimeError("Mask path: {}/{} not found".format(mask_path, mask_path.resolve()))
+            raise RuntimeError("Mask path: {} / {} not found".format(mask_path, mask_path.resolve()))
         for f in image_path.iterdir():
             if f.is_file():
                 mask_path = self._get_mask_path(f)
