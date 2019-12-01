@@ -19,7 +19,8 @@ class Concat(nn.Module):
         inputs_shapes3 = [x.shape[3] for x in inputs]
 
         if np.all(np.array(inputs_shapes2) == min(inputs_shapes2)) and np.all(
-                np.array(inputs_shapes3) == min(inputs_shapes3)):
+            np.array(inputs_shapes3) == min(inputs_shapes3)
+        ):
             inputs_ = inputs
         else:
             target_shape2 = min(inputs_shapes2)
@@ -50,24 +51,31 @@ class Swish(nn.Module):
         return x * self.s(x)
 
 
-def ConvBNAct(in_channel, out_channel, kernel_size, stride=1, act_fun='LeakyReLU'):
+def ConvBNAct(
+    in_channel, out_channel, kernel_size, stride=1, act_fun="LeakyReLU", is_deconv=False
+):
     to_pad = int((kernel_size - 1) / 2)
-    conv = nn.Conv2d(in_channel, out_channel, kernel_size, stride, padding=to_pad, bias=True)
+    conv = (
+        nn.ConvTranspose2d(in_channel, out_channel, kernel_size, stride, padding=to_pad)
+        if is_deconv
+        else nn.Conv2d(in_channel, out_channel, kernel_size, stride, padding=to_pad)
+    )
+
     bn = nn.BatchNorm2d(out_channel)
     if isinstance(act_fun, str):
-        if act_fun == 'LeakyReLU':
+        if act_fun == "LeakyReLU":
             act = nn.LeakyReLU(0.2, inplace=True)
-        elif act_fun == 'Swish':
+        elif act_fun == "ReLU":
+            act = nn.ReLU(inplace=True)
+        elif act_fun == "Swish":
             act = Swish()
-        elif act_fun == 'ELU':
-            act = nn.ELU()
-        elif act_fun == 'none':
+        elif act_fun == "ELU":
+            act = nn.ELU(inplace=True)
+        elif act_fun == "none":
             act = nn.Sequential()
         else:
             assert False
     else:
         assert False
 
-    return nn.Sequential(
-        conv, bn, act
-    )
+    return nn.Sequential(conv, bn, act)

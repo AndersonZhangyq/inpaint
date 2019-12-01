@@ -25,27 +25,20 @@ def psnr_loss(input, target):
 torch.nn.Module.add = add_module
 
 
-class DeepImagePrior(pl.LightningModule):
+class DIP(nn.Module):
     def __init__(self, hparams):
-        super(DeepImagePrior, self).__init__()
-        self.hparams = hparams
-        self.l1 = torch.nn.Linear(28 * 28, 10)
-        self.loss_type = hparams.loss_type
-        # self.data_root = "data/sub_data"
-        self.data_root = Path('C:\\Users\\zhang\\Desktop\\Code\\inpaint\\pytorch-lightning-seed\\data\\sub_data')
-        self.saved_output = None
-        self.show_masked_once = False
+        super(DIP, self).__init__()
         num_input_channels = 2
         num_output_channels = 3
-        num_channels_down = [16, 32, 64, 128, 128][:hparams.depth]
-        num_channels_up = [16, 32, 64, 128, 128][:hparams.depth]
-        num_channels_skip = [4, 4, 4, 4, 4][:hparams.depth]
+        num_channels_down = [16, 32, 64, 128, 128][: hparams.depth]
+        num_channels_up = [16, 32, 64, 128, 128][: hparams.depth]
+        num_channels_skip = [4, 4, 4, 4, 4][: hparams.depth]
         filter_size_down = 3
         filter_size_up = 3
         filter_skip_size = 1
         need_sigmoid = True
-        upsample_mode = 'nearest'
-        act_fun = 'LeakyReLU'
+        upsample_mode = "nearest"
+        act_fun = "LeakyReLU"
         need1x1_up = True
         assert len(num_channels_down) == len(num_channels_up) == len(num_channels_skip)
 
@@ -66,17 +59,48 @@ class DeepImagePrior(pl.LightningModule):
                 model_tmp.add_module(str(len(model_tmp)), Concat(1, skip, deeper))
             else:
                 model_tmp.add_module(str(len(model_tmp)), deeper)
-            model_tmp.add_module(str(len(model_tmp)), nn.BatchNorm2d(
-                num_channels_skip[i] + (num_channels_up[i + 1] if i < last_scale else num_channels_down[i])))
+            model_tmp.add_module(
+                str(len(model_tmp)),
+                nn.BatchNorm2d(
+                    num_channels_skip[i]
+                    + (
+                        num_channels_up[i + 1]
+                        if i < last_scale
+                        else num_channels_down[i]
+                    )
+                ),
+            )
             if num_channels_skip[i] != 0:
-                skip.add_module(str(len(skip)),
-                                ConvBNAct(input_depth, num_channels_skip[i], filter_skip_size, act_fun=act_fun))
+                skip.add_module(
+                    str(len(skip)),
+                    ConvBNAct(
+                        input_depth,
+                        num_channels_skip[i],
+                        filter_skip_size,
+                        act_fun=act_fun,
+                    ),
+                )
 
-            deeper.add_module(str(len(deeper)),
-                              ConvBNAct(input_depth, num_channels_down[i], filter_size_down, stride=2, act_fun=act_fun))
+            deeper.add_module(
+                str(len(deeper)),
+                ConvBNAct(
+                    input_depth,
+                    num_channels_down[i],
+                    filter_size_down,
+                    stride=2,
+                    act_fun=act_fun,
+                ),
+            )
 
-            deeper.add_module(str(len(deeper)),
-                              ConvBNAct(num_channels_down[i], num_channels_down[i], filter_size_down, act_fun=act_fun))
+            deeper.add_module(
+                str(len(deeper)),
+                ConvBNAct(
+                    num_channels_down[i],
+                    num_channels_down[i],
+                    filter_size_down,
+                    act_fun=act_fun,
+                ),
+            )
             deeper_main = nn.Sequential()
 
             if i == len(num_channels_down) - 1:
@@ -85,24 +109,54 @@ class DeepImagePrior(pl.LightningModule):
             else:
                 deeper.add_module(str(len(deeper)), deeper_main)
                 k = num_channels_up[i + 1]
-            deeper.add_module(str(len(deeper)), nn.Upsample(scale_factor=2, mode=upsample_mode))
-            model_tmp.add_module(str(len(model_tmp)),
-                                 ConvBNAct(num_channels_skip[i] + k, num_channels_up[i], filter_size_up,
-                                           act_fun=act_fun))
+            deeper.add_module(
+                str(len(deeper)), nn.Upsample(scale_factor=2, mode=upsample_mode)
+            )
+            model_tmp.add_module(
+                str(len(model_tmp)),
+                ConvBNAct(
+                    num_channels_skip[i] + k,
+                    num_channels_up[i],
+                    filter_size_up,
+                    act_fun=act_fun,
+                ),
+            )
 
             if need1x1_up:
-                model_tmp.add_module(str(len(model_tmp)),
-                                     ConvBNAct(num_channels_up[i], num_channels_up[i], 1, act_fun=act_fun))
+                model_tmp.add_module(
+                    str(len(model_tmp)),
+                    ConvBNAct(
+                        num_channels_up[i], num_channels_up[i], 1, act_fun=act_fun
+                    ),
+                )
             input_depth = num_channels_down[i]
             model_tmp = deeper_main
 
-        model.add_module(str(len(model)), nn.Conv2d(num_channels_up[0], num_output_channels, 1))
+        model.add_module(
+            str(len(model)), nn.Conv2d(num_channels_up[0], num_output_channels, 1)
+        )
         if need_sigmoid:
             model.add_module(str(len(model)), nn.Sigmoid())
-
         self.model = model
-        # print(self.model)
-        # exit()
+
+    def forward(self, x):
+        return self.model(x)
+
+
+class DeepImagePrior(pl.LightningModule):
+    def __init__(self, hparams):
+        super(DeepImagePrior, self).__init__()
+        self.hparams = hparams
+        self.l1 = torch.nn.Linear(28 * 28, 10)
+        self.loss_type = hparams.loss_type
+        # self.data_root = "data/sub_data"
+        self.data_root = Path(
+            "C:\\Users\\zhang\\Desktop\\Code\\inpaint\\pytorch-lightning-seed\\data\\sub_data"
+        )
+        self.saved_output = None
+        self.show_masked_once = False
+
+        self.model = DIP(hparams)
 
     def forward(self, x):
         return self.model(x)
@@ -113,9 +167,12 @@ class DeepImagePrior(pl.LightningModule):
         predicted = self.forward(noise)
         self.saved_output = predicted.detach().cpu().numpy().squeeze()
         if not self.show_masked_once:
-            self.logger.experiment.add_image(f'masked_images',
-                                             origin.detach().cpu().numpy().squeeze() * mask.detach().cpu().numpy().squeeze(),
-                                             self.current_epoch)
+            self.logger.experiment.add_image(
+                f"masked_images",
+                origin.detach().cpu().numpy().squeeze()
+                * mask.detach().cpu().numpy().squeeze(),
+                self.current_epoch,
+            )
             self.show_masked_once = True
         if self.loss_type == "mse":
             loss_func = F.mse_loss
@@ -123,14 +180,20 @@ class DeepImagePrior(pl.LightningModule):
             loss_func = psnr_loss
         else:
             raise RuntimeError("Unknown loss type : {}".format(self.loss_type))
-        return {'loss': loss_func(predicted * mask, origin * mask)}
+        return {"loss": loss_func(predicted * mask, origin * mask)}
 
     def on_epoch_end(self):
         if self.current_epoch % 5 == 0:
-            self.logger.experiment.add_image(f'generated_images', self.saved_output, self.current_epoch)
+            self.logger.experiment.add_image(
+                f"generated_images", self.saved_output, self.current_epoch
+            )
             if not os.path.exists(self.hparams.ckpt_path):
                 os.makedirs(self.hparams.ckpt_path)
-            self.trainer.save_checkpoint(os.path.join(self.hparams.ckpt_path, "epoch_{}".format(self.current_epoch)))
+            self.trainer.save_checkpoint(
+                os.path.join(
+                    self.hparams.ckpt_path, "epoch_{}".format(self.current_epoch)
+                )
+            )
 
     # def validation_step(self, batch, batch_idx):
     #     # OPTIONAL
@@ -170,14 +233,14 @@ class DeepImagePrior(pl.LightningModule):
         """
         # MODEL specific
         parser = ArgumentParser(parents=[parent_parser])
-        parser.add_argument('--learning_rate', default=0.01, type=float)
-        parser.add_argument('--batch_size', default=1, type=int)
-        parser.add_argument('--depth', default=6, type=int)
-        parser.add_argument('--loss_type', default="psnr", type=str)
-        parser.add_argument('--ckpt_path', default="dip_model", type=str)
+        parser.add_argument("--learning_rate", default=0.01, type=float)
+        parser.add_argument("--batch_size", default=1, type=int)
+        parser.add_argument("--depth", default=6, type=int)
+        parser.add_argument("--loss_type", default="psnr", type=str)
+        parser.add_argument("--ckpt_path", default="dip_model", type=str)
 
         # training specific (for this model)
-        parser.add_argument('--max_nb_epochs', default=5000, type=int)
+        parser.add_argument("--max_nb_epochs", default=5000, type=int)
 
         return parser
 
