@@ -12,7 +12,6 @@ def main(hparams):
 
     # most basic trainer, uses good defaults
     trainer = Trainer(
-        max_nb_epochs=hparams.max_nb_epochs,
         gpus=hparams.gpus,
         nb_gpu_nodes=hparams.nodes,
         early_stop_callback=None,

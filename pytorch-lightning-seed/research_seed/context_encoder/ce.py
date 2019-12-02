@@ -119,14 +119,14 @@ class Discriminator(nn.Module):
             nn.Conv2d(out_channels[-1], 1, 4),
             nn.Sigmoid()
         )
-        self.blocks = blocks
-        # self.model = nn.Sequential(blocks)
+        # self.blocks = blocks
+        self.model = nn.Sequential(blocks)
 
     def forward(self, x):
-        for key, value in self.blocks.items():
-            x = value(x)
-            print(x.shape)
-        return x
+        # for key, value in self.blocks.items():
+        #     x = value(x)
+        #     print(x.shape)
+        # return x
         return self.model(x)
 
 
@@ -234,8 +234,19 @@ class ContextEncoder(pl.LightningModule):
         grid = torchvision.utils.make_grid(sample_imgs)
         self.logger.experiment.add_image(f"generated_images", grid, self.current_epoch)
 
+    @staticmethod
+    def add_model_specific_args(parent_parser):
+        parent_parser.add_argument("--batch_size", type=int, default=16, help="size of the batches")
+        parent_parser.add_argument("--lr", type=float, default=0.0002, help="adam: learning rate")
+        parent_parser.add_argument("--b1", type=float, default=0.5,
+                            help="adam: decay of first order momentum of gradient")
+        parent_parser.add_argument("--latent_dim", type=int, default=1,
+                        help="dimensionality of the latent space")
+        parent_parser.add_argument("--b2", type=float, default=0.999,
+                            help="adam: decay of first order momentum of gradient")
+        return parent_parser
+
 
 if __name__ == "__main__":
-    from research_seed.torchsummary import *
     gen = Generator(3)(torch.rand(2, 3, 128, 128))
     label = Discriminator(3)(gen)

@@ -180,7 +180,9 @@ class DeepImagePrior(pl.LightningModule):
             loss_func = psnr_loss
         else:
             raise RuntimeError("Unknown loss type : {}".format(self.loss_type))
-        return {"loss": loss_func(predicted * mask, origin * mask)}
+        loss = loss_func(predicted * mask, origin * mask)
+        tqdm_dict = {"loss": loss}
+        return {"loss": loss, 'log': tqdm_dict}
 
     def on_epoch_end(self):
         if self.current_epoch % 5 == 0:
