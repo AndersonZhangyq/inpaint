@@ -157,7 +157,7 @@ class ContextEncoder(pl.LightningModule):
         # train generator
         if optimizer_i == 0:
             # sample noise
-            z = torch.randn(imgs.shape[0], self.hparams.latent_dim)
+            z = torch.randn(imgs.shape[0], 3)
 
             # match gpu device (or keep as cpu)
             if self.on_gpu:
@@ -207,12 +207,13 @@ class ContextEncoder(pl.LightningModule):
             return output
 
     def configure_optimizers(self):
-        lr = self.hparams.lr
-        b1 = self.hparams.b1
-        b2 = self.hparams.b2
+        # lr = self.hparams.lr
+        # b1 = self.hparams.b1
+        # b2 = self.hparams.b2
+        lr = 2e-3
 
-        opt_g = torch.optim.Adam(self.generator.parameters(), lr=lr, betas=(b1, b2))
-        opt_d = torch.optim.Adam(self.discriminator.parameters(), lr=lr * 0.1, betas=(b1, b2))
+        opt_g = torch.optim.Adam(self.generator.parameters(), lr=lr)
+        opt_d = torch.optim.Adam(self.discriminator.parameters(), lr=lr * 0.1)
         return [opt_g, opt_d], []
 
     @pl.data_loader
@@ -224,7 +225,7 @@ class ContextEncoder(pl.LightningModule):
         return DataLoader(dataset, batch_size=self.hparams.batch_size)
 
     def on_epoch_end(self):
-        z = torch.randn(8, self.hparams.latent_dim)
+        z = torch.randn(8, 3)
         # match gpu device (or keep as cpu)
         if self.on_gpu:
             z = z.cuda(self.last_imgs.device.index)
