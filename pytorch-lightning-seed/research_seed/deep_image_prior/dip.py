@@ -75,6 +75,7 @@ class DIP(nn.Module):
                         num_channels_skip[i],
                         filter_skip_size,
                         act_fun=act_fun,
+                    is_gated=hparams.use_gated_conv
                     ),
                 )
 
@@ -86,6 +87,7 @@ class DIP(nn.Module):
                     filter_size_down,
                     stride=2,
                     act_fun=act_fun,
+                    is_gated=hparams.use_gated_conv
                 ),
             )
 
@@ -96,6 +98,7 @@ class DIP(nn.Module):
                     num_channels_down[i],
                     filter_size_down,
                     act_fun=act_fun,
+                    is_gated=hparams.use_gated_conv
                 ),
             )
             deeper_main = nn.Sequential()
@@ -237,6 +240,7 @@ class DeepImagePrior(pl.LightningModule):
         parser.add_argument("--depth", default=6, type=int)
         parser.add_argument("--loss_type", default="psnr", type=str)
         parser.add_argument("--ckpt_path", default="dip_model", type=str)
+        parser.add_argument("--use_gated_conv", default=True, type=bool)
 
         # training specific (for this model)
         parser.add_argument("--max_nb_epochs", default=5000, type=int)
