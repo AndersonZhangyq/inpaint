@@ -19,10 +19,7 @@ def add_module(self, module):
 def psnr_loss(input, target):
     mse = F.mse_loss(input, target)
     psnr = -10 * torch.log10(mse)
-    return mse - psnr
-
-
-torch.nn.Module.add = add_module
+    return mse + 1 / psnr
 
 
 class DIP(nn.Module):

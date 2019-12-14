@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import numpy as np
+from torch.nn import functional as F
 
 
 class Concat(nn.Module):
@@ -51,16 +52,36 @@ class Swish(nn.Module):
         return x * self.s(x)
 
 
+class GatedConvolution(nn.Module):
+    def __init__(self, in_channel, out_channel, kernel_size, stride=1, act_fun=None, is_deconv=False):
+        super(GatedConvolution, self).__init__()
+        to_pad = int((kernel_size - 1) / 2)
+        
+        self.gate = nn.Sequential(
+            nn.Conv2d(in_channel, out_channel, kernel_size, stride=stride, padding=to_pad),
+            act_fun
+        )
+        self.conv = nn.Conv2d(in_channel, out_channel, kernel_size, stride=stride, padding=to_pad)
+
+    def forward(self, x):
+        return self.gate(x) * self.conv(x)
+
+class GatedTransposeConvolution(torch.nn.Module):
+    def __init__(self, in_channel, out_channel, kernel_size, stride=1, act_fun=None):
+        super(GatedTransposeConvolution, self).__init__()
+
+        self.conv = GatedConvolution(in_channel, out_channel, kernel_size, stride, act_fun=act_fun)
+
+    def forward(self, input):
+        x = F.interpolate(input, scale_factor=2)
+        x = self.conv(x)
+        return x
+
+
 def ConvBNAct(
-    in_channel, out_channel, kernel_size, stride=1, act_fun="LeakyReLU", is_deconv=False
+    in_channel, out_channel, kernel_size, stride=1, act_fun="LeakyReLU", is_deconv=False, is_gated=False
 ):
     to_pad = int((kernel_size - 1) / 2)
-    conv = (
-        nn.ConvTranspose2d(in_channel, out_channel, kernel_size, stride, padding=to_pad)
-        if is_deconv
-        else nn.Conv2d(in_channel, out_channel, kernel_size, stride, padding=to_pad)
-    )
-
     bn = nn.BatchNorm2d(out_channel)
     if isinstance(act_fun, str):
         if act_fun == "LeakyReLU":
@@ -71,11 +92,25 @@ def ConvBNAct(
             act = Swish()
         elif act_fun == "ELU":
             act = nn.ELU(inplace=True)
-        elif act_fun == "none":
+        elif act_fun is None:
             act = nn.Sequential()
         else:
             assert False
     else:
         assert False
+    if is_gated:
+        conv = (
+            nn.GatedTransposeConvolution(in_channel, out_channel, kernel_size, stride, padding=to_pad, act_fun=act)
+            if is_deconv
+            else GatedConvolution(in_channel, out_channel, kernel_size, stride, padding=to_pad, act_fun=act)
+        )
+        return nn.Sequential(conv, bn)
 
-    return nn.Sequential(conv, bn, act)
+    else:
+        conv = (
+            nn.ConvTranspose2d(in_channel, out_channel, kernel_size, stride, padding=to_pad)
+            if is_deconv
+            else nn.Conv2d(in_channel, out_channel, kernel_size, stride, padding=to_pad)
+        )
+        return nn.Sequential(conv, bn, act)
+
