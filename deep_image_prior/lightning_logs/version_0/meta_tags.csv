@@ -1,0 +1,10 @@
+key,value
+gpus,-1
+nodes,1
+learning_rate,0.01
+batch_size,1
+depth,6
+loss_type,weighted_mse
+ckpt_path,dip_model
+use_gated_conv,False
+max_nb_epochs,5000

@@ -9,17 +9,7 @@ from argparse import ArgumentParser
 
 import pytorch_lightning as pl
 from research_seed.common import *
-from research_seed.dataset import *
-
-
-def add_module(self, module):
-    self.add_module(str(len(self) + 1), module)
-
-
-def psnr_loss(input, target):
-    mse = F.mse_loss(input, target)
-    psnr = -10 * torch.log10(mse)
-    return mse + 1 / psnr
+from research_seed.deep_image_prior.dataset import *
 
 
 class DIP(nn.Module):
@@ -75,7 +65,7 @@ class DIP(nn.Module):
                         num_channels_skip[i],
                         filter_skip_size,
                         act_fun=act_fun,
-                    is_gated=hparams.use_gated_conv
+                        is_gated=hparams.use_gated_conv,
                     ),
                 )
 
@@ -87,7 +77,7 @@ class DIP(nn.Module):
                     filter_size_down,
                     stride=2,
                     act_fun=act_fun,
-                    is_gated=hparams.use_gated_conv
+                    is_gated=hparams.use_gated_conv,
                 ),
             )
 
@@ -98,7 +88,7 @@ class DIP(nn.Module):
                     num_channels_down[i],
                     filter_size_down,
                     act_fun=act_fun,
-                    is_gated=hparams.use_gated_conv
+                    is_gated=hparams.use_gated_conv,
                 ),
             )
             deeper_main = nn.Sequential()
@@ -150,10 +140,12 @@ class DeepImagePrior(pl.LightningModule):
         self.l1 = torch.nn.Linear(28 * 28, 10)
         self.loss_type = hparams.loss_type
         # self.data_root = "data/sub_data"
-        self.data_root = Path(
-            "C:\\Users\\zhang\\Desktop\\Code\\inpaint\\pytorch-lightning-seed\\data\\sub_data"
-        )
+        self.data_root = "data"
+        # self.data_root = Path(
+        # "C:\\Users\\zhang\\Desktop\\Code\\inpaint\\pytorch-lightning-seed\\data\\sub_data"
+        # )
         self.saved_output = None
+        self.predict_output = None
         self.show_masked_once = False
 
         self.model = DIP(hparams)
@@ -163,9 +155,15 @@ class DeepImagePrior(pl.LightningModule):
 
     def training_step(self, batch, batch_idx):
         # REQUIRED
-        noise, origin, mask = batch
+        noise, origin, mask, context_mask = batch
         predicted = self.forward(noise)
-        self.saved_output = predicted.detach().cpu().numpy().squeeze()
+        self.predict_output = predicted.detach().cpu().numpy().squeeze()
+        self.saved_output = (
+            predicted.detach().cpu().numpy().squeeze()
+            * (1 - mask.detach().cpu().numpy().squeeze())
+            + origin.detach().cpu().numpy().squeeze()
+            * mask.detach().cpu().numpy().squeeze()
+        )
         if not self.show_masked_once:
             self.logger.experiment.add_image(
                 f"masked_images",
@@ -178,16 +176,26 @@ class DeepImagePrior(pl.LightningModule):
             loss_func = F.mse_loss
         elif self.loss_type == "psnr":
             loss_func = psnr_loss
+        elif self.loss_type == "weighted_mse":
+            loss_func = weighted_mse_loss
+        elif self.loss_type == "weighted_psnr":
+            loss_func = weighted_psnr_loss
         else:
             raise RuntimeError("Unknown loss type : {}".format(self.loss_type))
-        loss = loss_func(predicted * mask, origin * mask)
+        if "weighted" in self.loss_type:
+            loss = loss_func(predicted * mask, origin * mask, context_mask)
+        else:
+            loss = loss_func(predicted * mask, origin * mask)
         tqdm_dict = {"loss": loss}
-        return {"loss": loss, 'log': tqdm_dict}
+        return {"loss": loss, "log": tqdm_dict}
 
     def on_epoch_end(self):
         if self.current_epoch % 5 == 0:
             self.logger.experiment.add_image(
                 f"generated_images", self.saved_output, self.current_epoch
+            )
+            self.logger.experiment.add_image(
+                f"predict_images", self.predict_output, self.current_epoch
             )
             if not os.path.exists(self.hparams.ckpt_path):
                 os.makedirs(self.hparams.ckpt_path)
@@ -238,9 +246,12 @@ class DeepImagePrior(pl.LightningModule):
         parser.add_argument("--learning_rate", default=0.01, type=float)
         parser.add_argument("--batch_size", default=1, type=int)
         parser.add_argument("--depth", default=6, type=int)
-        parser.add_argument("--loss_type", default="psnr", type=str)
+        # parser.add_argument("--loss_type", default="psnr", type=str)
+        # parser.add_argument("--loss_type", default="mse", type=str)
+        # parser.add_argument("--loss_type", default="weighted_psnr", type=str)
+        parser.add_argument("--loss_type", default="weighted_mse", type=str)
         parser.add_argument("--ckpt_path", default="dip_model", type=str)
-        parser.add_argument("--use_gated_conv", default=True, type=bool)
+        parser.add_argument("--use_gated_conv", action="store_true")
 
         # training specific (for this model)
         parser.add_argument("--max_nb_epochs", default=5000, type=int)

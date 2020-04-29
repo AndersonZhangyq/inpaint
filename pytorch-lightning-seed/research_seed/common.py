@@ -53,24 +53,25 @@ class Swish(nn.Module):
 
 
 class GatedConvolution(nn.Module):
-    def __init__(self, in_channel, out_channel, kernel_size, stride=1, act_fun=None, is_deconv=False):
+    def __init__(self, in_channel, out_channel, kernel_size, stride=1, act_fun=None, padding=0):
         super(GatedConvolution, self).__init__()
-        to_pad = int((kernel_size - 1) / 2)
         
-        self.gate = nn.Sequential(
-            nn.Conv2d(in_channel, out_channel, kernel_size, stride=stride, padding=to_pad),
-            act_fun
-        )
-        self.conv = nn.Conv2d(in_channel, out_channel, kernel_size, stride=stride, padding=to_pad)
+        self.act_1 = nn.Sigmoid()
+        self.act_2 = act_fun
+        self.conv = nn.Conv2d(in_channel, out_channel * 2, kernel_size, stride=stride, padding=padding)
 
     def forward(self, x):
-        return self.gate(x) * self.conv(x)
+        x = self.conv(x)
+        front, back = torch.chunk(x, 2, 1)
+        front = self.act_2(front)
+        back = self.act_1(back)
+        return front * back
 
 class GatedTransposeConvolution(torch.nn.Module):
-    def __init__(self, in_channel, out_channel, kernel_size, stride=1, act_fun=None):
+    def __init__(self, in_channel, out_channel, kernel_size, padding=0, stride=1, act_fun=None):
         super(GatedTransposeConvolution, self).__init__()
 
-        self.conv = GatedConvolution(in_channel, out_channel, kernel_size, stride, act_fun=act_fun)
+        self.conv = GatedConvolution(in_channel, out_channel, kernel_size, stride, padding=padding, act_fun=act_fun)
 
     def forward(self, input):
         x = F.interpolate(input, scale_factor=2)
@@ -114,3 +115,18 @@ def ConvBNAct(
         )
         return nn.Sequential(conv, bn, act)
 
+
+def psnr_loss(input, target):
+    mse = F.mse_loss(input, target)
+    psnr = -10 * torch.log10(mse)
+    return 1 / psnr
+
+
+def weighted_psnr_loss(input, target, weight):
+    mse = weighted_mse_loss(input, target, weight)
+    psnr = -10 * torch.log10(mse)
+    return 1 / psnr
+
+
+def weighted_mse_loss(input, target, weight):
+    return (F.mse_loss(input, target, reduction='none') * weight).mean()
